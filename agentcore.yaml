@@ -1,0 +1,39 @@
+name: travel-agent-aws
+version: "1.0"
+description: "AI Travel Agent using AWS Bedrock AgentCore"
+
+runtime:
+  framework: "strands"
+  python_version: "3.11"
+  region: "us-west-2"
+  
+compute:
+  cpu: 1024
+  memory: 2048
+  timeout: 300
+  
+models:
+  primary: "us.amazon.nova-premier-v1:0"
+  fallback: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  
+environment:
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  
+# These will be set securely via CLI
+secrets:
+  - MOCK_TRAVEL_API_KEY
+  - BOOKING_API_KEY
+  
+gateway:
+  enabled: true
+  endpoints:
+    - name: "travel_api"
+      url: "https://api.example.com/travel"
+    - name: "weather_api" 
+      url: "https://api.openweathermap.org/data/2.5"
+
+memory:
+  enabled: true
+  type: "bedrock"
+  retention_days: 30
