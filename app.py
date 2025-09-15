@@ -4,16 +4,26 @@ This wraps your existing orchestrator.py to work with AgentCore Runtime
 """
 
 from bedrock_agentcore import BedrockAgentCoreApp
+from starlette.middleware.cors import CORSMiddleware
 import json
 import sys
 import os
-from orchestrator import Orchestrator  # Adjust import based on your orchestrator class name
+from orchestrator import Orchestrator
 
 # Add current directory to path to import your existing modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Initialize AgentCore app
 app = BedrockAgentCoreApp()
+
+# Add CORS middleware to allow browser requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins (for development)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize your existing travel system
 print("🚀 Initializing your existing travel agent system...")
@@ -24,38 +34,24 @@ planning_agent = None
 
 try:
     orchestrator = Orchestrator()
-    print("✅ TravelOrchestrator initialized successfully")
+    print("✅ Orchestrator initialized successfully")
     
 except Exception as e:
-    print(f"⚠️  Could not import TravelOrchestrator: {e}")
-    try:
-        # Try importing orchestrator class with different name
-        import orchestrator
-        # If orchestrator.py has a class, we'll try to find it
-        for attr_name in dir(orchestrator):
-            attr = getattr(orchestrator, attr_name)
-            if hasattr(attr, '__call__') and not attr_name.startswith('_'):
-                print(f"Found callable: {attr_name}")
-                if 'orchestrat' in attr_name.lower() or 'travel' in attr_name.lower():
-                    orchestrator = attr()
-                    print(f"✅ Using {attr_name} as orchestrator")
-                    break
-    except Exception as e2:
-        print(f"⚠️  Could not import orchestrator module: {e2}")
+    print(f"⚠️  Could not import Orchestrator: {e}")
 
 try:
     # Try importing your other agents
     from booking_tools import BookingAgent
     booking_agent = BookingAgent()
     print("✅ BookingAgent initialized")
-except:
+except Exception as e:
     print("⚠️  BookingAgent not available")
 
 try:
     from planning_agent import PlanningAgent  
     planning_agent = PlanningAgent()
     print("✅ PlanningAgent initialized")
-except:
+except Exception as e:
     print("⚠️  PlanningAgent not available")
 
 @app.entrypoint
@@ -68,7 +64,7 @@ def invoke(payload):
         user_message = payload.get("message", payload.get("prompt", ""))
         session_id = payload.get("session_id", "default")
         
-        print(f"📨 Processing request (session: {session_id}): {user_message[:100]}...")
+        print(f"📨 Processing request (session: {session_id}): {user_message}")
         
         if not user_message:
             return {
@@ -79,31 +75,15 @@ def invoke(payload):
         # Use your existing orchestrator if available
         if orchestrator:
             try:
-                # Try different method names your orchestrator might have
                 response = None
                 
                 if hasattr(orchestrator, 'handle_user_request'):
                     print("📞 Calling orchestrator.handle_user_request()")
                     response = orchestrator.handle_user_request(user_message)
-                elif hasattr(orchestrator, 'process_request'):
-                    print("📞 Calling orchestrator.process_request()")
-                    response = orchestrator.process_request(user_message)
-                elif hasattr(orchestrator, 'handle_request'):
-                    print("📞 Calling orchestrator.handle_request()")
-                    response = orchestrator.handle_request(user_message)
-                elif hasattr(orchestrator, 'orchestrate'):
-                    print("📞 Calling orchestrator.orchestrate()")
-                    response = orchestrator.orchestrate(user_message)
-                elif hasattr(orchestrator, 'run'):
-                    print("📞 Calling orchestrator.run()")
-                    response = orchestrator.run(user_message)
-                elif callable(orchestrator):
-                    print("📞 Calling orchestrator directly")
-                    response = orchestrator(user_message)
                 else:
-                    print("❌ No suitable method found in orchestrator")
+                    print("❌ handle_user_request method not found")
                     available_methods = [method for method in dir(orchestrator) if not method.startswith('_')]
-                    response = f"Orchestrator available but no suitable method found. Available methods: {available_methods}"
+                    response = f"Method not found. Available methods: {available_methods}"
                 
                 # Ensure response is a string
                 if response is None:
@@ -111,7 +91,7 @@ def invoke(payload):
                 elif not isinstance(response, str):
                     response = str(response)
                 
-                print(f"✅ Orchestrator response: {response[:100]}...")
+                print(f"✅ Orchestrator response received")
                 
                 return {
                     "result": response,
@@ -136,18 +116,7 @@ def invoke(payload):
         else:
             # Fallback response if orchestrator isn't available
             return {
-                "result": f"""I understand you're asking about: "{user_message}"
-
-I'm your travel planning assistant running on AWS Bedrock AgentCore, but I'm currently initializing my local orchestrator system. 
-
-Here's what I can help you with once fully loaded:
-🔍 Flight and hotel searches
-🗓️ Detailed itinerary planning
-🌤️ Weather and packing advice
-✅ Booking assistance
-💡 Local recommendations
-
-Please try your request again in a moment, or rephrase it as a specific travel question.""",
+                "result": f"I understand you're asking about: '{user_message}'. I'm currently initializing my travel system. Please try again in a moment.",
                 "session_id": session_id,
                 "status": "initializing"
             }
@@ -163,21 +132,6 @@ Please try your request again in a moment, or rephrase it as a specific travel q
             "error": str(e)
         }
 
-# Health check endpoint  
-@app.route("/health")
-def health_check():
-    """Health check for AgentCore deployment"""
-    return {
-        "status": "healthy",
-        "service": "AWS Bedrock AgentCore Travel Agent",
-        "orchestrator_available": orchestrator is not None,
-        "agents": {
-            "booking": booking_agent is not None,
-            "planning": planning_agent is not None
-        },
-        "orchestrator_methods": list(dir(orchestrator)) if orchestrator else []
-    }
-
 # For local testing and debugging
 if __name__ == "__main__":
     print("=" * 70)
@@ -185,7 +139,7 @@ if __name__ == "__main__":
     print("=" * 70)
     print("✅ Your existing orchestrator.py wrapped with AgentCore")
     print("🌐 Local server: http://localhost:8080")
-    print("📡 Health check: http://localhost:8080/health")
+    print("🌍 CORS enabled for browser requests")
     print("🔧 Debug info:")
     print(f"   - Orchestrator loaded: {orchestrator is not None}")
     print(f"   - Booking agent loaded: {booking_agent is not None}")
@@ -196,12 +150,10 @@ if __name__ == "__main__":
         print(f"   - Available orchestrator methods: {methods}")
     
     print("-" * 70)
-    print("🧪 Test commands:")
-    print("curl -X POST http://localhost:8080/invocations \\")
-    print("  -H 'Content-Type: application/json' \\")
-    print("  -d '{\"message\": \"Plan a 5-day trip to Tokyo in March\"}'")
-    print()
-    print("curl http://localhost:8080/health")
+    print("🧪 Test with curl:")
+    print('curl -X POST http://localhost:8080/invocations \\')
+    print('  -H "Content-Type: application/json" \\')
+    print('  -d \'{"message": "Find flights from LHR to MAS"}\'')
     print("=" * 70)
     
     # Run the AgentCore app

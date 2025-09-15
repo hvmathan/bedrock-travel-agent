@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Travel Agent - Powered by AWS Bedrock AgentCore</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .chat-container {
+            height: 500px;
+            overflow-y: auto;
+        }
+        .message-bubble {
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .typing-indicator {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 50%, 100% { opacity: 1; }
+            25%, 75% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        const TravelAgentUI = () => {
+            const [messages, setMessages] = useState([
+                {
+                    id: 1,
+                    type: 'agent',
+                    content: 'Hello! I\'m your AI Travel Agent powered by AWS Bedrock AgentCore. I can help you search for flights, find hotels, plan itineraries, and more. What would you like to do today?',
+                    timestamp: new Date()
+                }
+            ]);
+            const [inputMessage, setInputMessage] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+            const [endpoint, setEndpoint] = useState('cloud'); // 'local' or 'cloud'
+            const messagesEndRef = useRef(null);
+
+            const scrollToBottom = () => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            };
+
+            useEffect(() => {
+                scrollToBottom();
+            }, [messages]);
+
+            const sendMessage = async () => {
+                if (!inputMessage.trim() || isLoading) return;
+
+                // Store the message before clearing the input
+                const currentMessage = inputMessage.trim();
+
+                const userMessage = {
+                    id: Date.now(),
+                    type: 'user',
+                    content: currentMessage,
+                    timestamp: new Date()
+                };
+
+                setMessages(prev => [...prev, userMessage]);
+                setInputMessage(''); // Clear input after storing the message
+                setIsLoading(true);
+
+                try {
+                    let response;
+                    
+                    if (endpoint === 'local') {
+                        // Local endpoint - use stored message
+                        console.log('Sending to local:', currentMessage); // Debug log
+                        response = await fetch('http://localhost:8080/invocations', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                message: currentMessage, // Use stored message
+                                session_id: 'web-ui-session'
+                            })
+                        });
+                    } else {
+                        // Cloud endpoint simulation
+                        response = await simulateCloudResponse(currentMessage); // Use stored message
+                    }
+
+                    let data;
+                    if (endpoint === 'local') {
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+                        data = await response.json();
+                        console.log('Local response:', data); // Debug log
+                    } else {
+                        data = response;
+                    }
+
+                    const agentMessage = {
+                        id: Date.now() + 1,
+                        type: 'agent',
+                        content: data.result || data.response || 'Sorry, I couldn\'t process your request.',
+                        timestamp: new Date(),
+                        powered_by: data.powered_by || 'AWS Bedrock AgentCore'
+                    };
+
+                    setMessages(prev => [...prev, agentMessage]);
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    const errorMessage = {
+                        id: Date.now() + 1,
+                        type: 'agent',
+                        content: `Sorry, I'm having trouble connecting to the travel service: ${error.message}. Please try again.`,
+                        timestamp: new Date(),
+                        error: true
+                    };
+                    setMessages(prev => [...prev, errorMessage]);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const simulateCloudResponse = async (message) => {
+                // Simulate cloud endpoint response
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                
+                const lowerMessage = message.toLowerCase();
+                
+                if (lowerMessage.includes('flight')) {
+                    return {
+                        result: `Flight Search Results:\n\nSkyWings Flight SW101: NYC → Tokyo\nDate: 2025-09-15, Departure: 08:30, Arrival: 14:45\nPrice: $349.99\n\nGlobalAir Flight GA456: NYC → Tokyo\nDate: 2025-09-15, Departure: 12:15, Arrival: 18:20\nPrice: $419.50\n\nNote: This is a demo response. In production, this would call your deployed AgentCore endpoint.`,
+                        powered_by: 'AWS Bedrock AgentCore (Cloud Simulation)'
+                    };
+                } else if (lowerMessage.includes('hotel')) {
+                    return {
+                        result: `Hotel Search Results:\n\nGrand Plaza Hotel (Rating: 4.7/5)\nLocation: Tokyo, Date: 2025-09-15\nPrice: $189.99 per night\nAmenities: WiFi, Pool, Gym\n\nCity Center Suites (Rating: 4.2/5)\nLocation: Tokyo, Date: 2025-09-15\nPrice: $159.50 per night\nAmenities: WiFi, Breakfast, Parking\n\nNote: This is a demo response. Connect to real APIs for live data.`,
+                        powered_by: 'AWS Bedrock AgentCore (Cloud Simulation)'
+                    };
+                } else {
+                    return {
+                        result: `I can help you with:\n- Flight searches\n- Hotel bookings\n- Trip planning\n- Itinerary creation\n\nTry asking: "Find flights from NYC to Tokyo" or "I need hotels in Paris"`,
+                        powered_by: 'AWS Bedrock AgentCore (Cloud Simulation)'
+                    };
+                }
+            };
+
+            const quickActions = [
+                { text: 'Find flights from JFK to LAX', icon: 'fas fa-plane' },
+                { text: 'Find flights from LHR to CDG', icon: 'fas fa-plane' },
+                { text: 'Hotels in Paris for next week', icon: 'fas fa-bed' },
+                { text: 'Plan a 5-day trip to Italy', icon: 'fas fa-map-marked-alt' }
+            ];
+
+            const handleQuickAction = (action) => {
+                setInputMessage(action.text);
+            };
+
+            const formatMessage = (content) => {
+                return content.split('\n').map((line, index) => (
+                    <span key={index}>
+                        {line}
+                        {index < content.split('\n').length - 1 && <br />}
+                    </span>
+                ));
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    {/* Header */}
+                    <div className="gradient-bg text-white p-6 shadow-lg">
+                        <div className="max-w-4xl mx-auto">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-3">
+                                    <i className="fas fa-robot text-3xl"></i>
+                                    <div>
+                                        <h1 className="text-2xl font-bold">AI Travel Agent</h1>
+                                        <p className="text-blue-200">Powered by AWS Bedrock AgentCore</p>
+                                    </div>
+                                </div>
+                                
+                                {/* Endpoint Switcher */}
+                                <div className="flex items-center space-x-2">
+                                    <span className="text-sm">Endpoint:</span>
+                                    <select 
+                                        value={endpoint} 
+                                        onChange={(e) => setEndpoint(e.target.value)}
+                                        className="bg-white bg-opacity-20 text-white rounded px-3 py-1 text-sm"
+                                    >
+                                        <option value="cloud">Cloud (AgentCore)</option>
+                                        <option value="local">Local (localhost:8080)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="max-w-4xl mx-auto p-6">
+                        {/* Quick Actions */}
+                        <div className="mb-6">
+                            <h3 className="text-lg font-semibold text-gray-700 mb-3">Quick Actions</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {quickActions.map((action, index) => (
+                                    <button
+                                        key={index}
+                                                                            onClick={() => handleQuickAction(action)}
+                                        className="flex items-center space-x-3 p-3 bg-white rounded-lg shadow hover:shadow-md transition-shadow text-left"
+                                    >
+                                        <i className={`${action.icon} text-blue-500`}></i>
+                                        <span className="text-gray-700">{action.text}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Chat Container */}
+                        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+                            <div className="chat-container p-4 space-y-4">
+                                {messages.map((message) => (
+                                    <div
+                                        key={message.id}
+                                        className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                                    >
+                                        <div
+                                            className={`message-bubble p-3 rounded-lg ${
+                                                message.type === 'user'
+                                                    ? 'bg-blue-500 text-white'
+                                                    : message.error
+                                                    ? 'bg-red-100 text-red-800 border border-red-200'
+                                                    : 'bg-gray-100 text-gray-800'
+                                            }`}
+                                        >
+                                            <div className="font-medium">
+                                                {formatMessage(message.content)}
+                                            </div>
+                                            <div className={`text-xs mt-2 ${
+                                                message.type === 'user' ? 'text-blue-200' : 'text-gray-500'
+                                            }`}>
+                                                {message.timestamp.toLocaleTimeString()}
+                                                {message.powered_by && (
+                                                    <span className="ml-2">• {message.powered_by}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                
+                                {isLoading && (
+                                    <div className="flex justify-start">
+                                        <div className="message-bubble p-3 rounded-lg bg-gray-100 text-gray-800">
+                                            <div className="typing-indicator">
+                                                <i className="fas fa-robot mr-2"></i>
+                                                Processing your request...
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                <div ref={messagesEndRef} />
+                            </div>
+
+                            {/* Input Area */}
+                            <div className="border-t p-4 bg-gray-50">
+                                <div className="flex space-x-2">
+                                    <input
+                                        type="text"
+                                        value={inputMessage}
+                                        onChange={(e) => setInputMessage(e.target.value)}
+                                        onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                                        placeholder="Ask me about flights, hotels, or trip planning..."
+                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                                        disabled={isLoading}
+                                    />
+                                    <button
+                                        onClick={sendMessage}
+                                        disabled={isLoading || !inputMessage.trim()}
+                                        className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        {isLoading ? (
+                                            <i className="fas fa-spinner fa-spin"></i>
+                                        ) : (
+                                            <i className="fas fa-paper-plane"></i>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Status Footer */}
+                        <div className="mt-6 text-center text-sm text-gray-500">
+                            <p>
+                                <i className="fas fa-shield-alt mr-1"></i>
+                                Secure travel planning powered by AWS Bedrock AgentCore
+                                {endpoint === 'local' && ' (Local Development Mode)'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<TravelAgentUI />, document.getElementById('root'));
+    </script>
+</body>
+</html>

@@ -1,0 +1,2 @@
+[console_scripts]
+agentcore = bedrock_agentcore_starter_toolkit.cli.cli:main

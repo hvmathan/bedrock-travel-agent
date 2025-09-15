@@ -19,12 +19,12 @@ agents:
       observability:
         enabled: true
     bedrock_agentcore:
-      agent_id: null
-      agent_arn: null
-      agent_session_id: null
+      agent_id: app-yY58fZHn5X
+      agent_arn: arn:aws:bedrock-agentcore:us-west-2:867126415696:runtime/app-yY58fZHn5X
+      agent_session_id: 5cdaa8ac-bacc-432f-a79e-101c728b88ba
     codebuild:
-      project_name: null
-      execution_role: null
-      source_bucket: null
+      project_name: bedrock-agentcore-app-builder
+      execution_role: arn:aws:iam::867126415696:role/AmazonBedrockAgentCoreSDKCodeBuild-us-west-2-a172cedcae
+      source_bucket: bedrock-agentcore-codebuild-sources-867126415696-us-west-2
     authorizer_configuration: null
     oauth_configuration: null

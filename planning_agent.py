@@ -1,5 +1,7 @@
 # planning_agent.py
 import json
+import re
+from datetime import datetime, timedelta
 from typing import Dict, Any
 
 class PlanningAgent:
@@ -64,62 +66,127 @@ class PlanningAgent:
     
     def _extract_flight_details(self, user_input: str) -> Dict[str, Any]:
         """Extract flight search parameters from user input."""
+        # Default values
+        default_date = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
         plan = {
-            "origin": "NYC",  # Default values
+            "origin": "JFK",  # Better default
             "destination": "LAX", 
-            "date": "2025-09-15"
+            "date": default_date
         }
         
-        # Simple keyword extraction (can be improved with NLP)
         try:
             text = user_input.lower()
+            print(f"🔍 Parsing flight request: '{user_input}'")
             
-            # Extract origin and destination
-            if "from" in text and "to" in text:
-                from_idx = text.find("from") + 4
-                to_idx = text.find("to")
+            # Pattern 1: "flights from ABC to XYZ" or "flights from ABC-XYZ"
+            patterns = [
+                # "flights from LHR to CDG"
+                r'from\s+([A-Za-z]{3})\s+to\s+([A-Za-z]{3})',
+                # "flights from LHR-CDG" or "flights LHR-CDG"
+                r'(?:from\s+)?([A-Za-z]{3})\s*[-–]\s*([A-Za-z]{3})',
+                # "flights JFK LAX"
+                r'flights?\s+([A-Za-z]{3})\s+([A-Za-z]{3})',
+                # "from New York to Los Angeles"
+                r'from\s+([A-Za-z\s]+?)\s+to\s+([A-Za-z\s]+?)(?:\s|$)',
+            ]
+            
+            origin_found = None
+            destination_found = None
+            
+            for pattern in patterns:
+                match = re.search(pattern, text)
+                if match:
+                    origin_found = match.group(1).strip()
+                    destination_found = match.group(2).strip()
+                    print(f"✅ Pattern matched: {origin_found} → {destination_found}")
+                    break
+            
+            if origin_found and destination_found:
+                # Convert to airport codes if needed
+                plan["origin"] = self._normalize_airport_code(origin_found)
+                plan["destination"] = self._normalize_airport_code(destination_found)
                 
-                if from_idx < to_idx:
-                    origin = user_input[from_idx:to_idx].strip()
-                    destination = user_input[text.find("to") + 2:].split()[0].strip()
+            print(f"🎯 Final plan: {plan['origin']} → {plan['destination']} on {plan['date']}")
+            
+            # Extract dates if provided
+            date_patterns = [
+                r'\b(\d{4}-\d{2}-\d{2})\b',  # 2025-09-15
+                r'\b(\d{1,2}/\d{1,2}/\d{4})\b',  # 9/15/2025
+                r'\b((?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2})\b'
+            ]
+            
+            for date_pattern in date_patterns:
+                dates = re.findall(date_pattern, text, re.IGNORECASE)
+                if dates:
+                    plan["date"] = dates[0]
+                    break
                     
-                    if origin and len(origin) > 0:
-                        plan["origin"] = origin.upper()[:3] if len(origin) <= 3 else origin
-                    if destination and len(destination) > 0:
-                        plan["destination"] = destination.upper()[:3] if len(destination) <= 3 else destination
-            
-            # Extract dates (basic implementation)
-            import re
-            date_pattern = r'\d{4}-\d{2}-\d{2}'
-            dates = re.findall(date_pattern, user_input)
-            if dates:
-                plan["date"] = dates[0]
-                
         except Exception as e:
-            print(f"Error extracting flight details: {e}")
+            print(f"❌ Error extracting flight details: {e}")
             # Use defaults if extraction fails
             
         return plan
     
+    def _normalize_airport_code(self, location: str) -> str:
+        """Convert city names to airport codes or clean up codes."""
+        location = location.upper().strip()
+        
+        # If already a 3-letter code, return as-is
+        if len(location) == 3 and location.isalpha():
+            return location
+        
+        # City name mappings
+        city_mappings = {
+            'NEW YORK': 'JFK',
+            'NYC': 'JFK',
+            'NEWYORK': 'JFK',
+            'LONDON': 'LHR',
+            'PARIS': 'CDG',
+            'TOKYO': 'NRT',
+            'LOS ANGELES': 'LAX',
+            'LOSANGELES': 'LAX',
+            'SAN FRANCISCO': 'SFO',
+            'SANFRANCISCO': 'SFO',
+            'CHICAGO': 'ORD',
+            'MIAMI': 'MIA',
+            'BOSTON': 'BOS',
+            'SEATTLE': 'SEA',
+            'DENVER': 'DEN',
+            'ATLANTA': 'ATL',
+            'DALLAS': 'DFW',
+            'WASHINGTON': 'DCA',
+            'HYDERABAD': 'HYD',
+            'KUALA LUMPUR': 'MAS'
+        }
+        
+        return city_mappings.get(location, location[:3] if location else 'JFK')
+    
     def _extract_hotel_details(self, user_input: str) -> Dict[str, Any]:
         """Extract hotel search parameters from user input."""
+        default_date = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
         plan = {
             "location": "Los Angeles",
-            "date": "2025-09-15"
+            "date": default_date
         }
         
         try:
             text = user_input.lower()
             
-            # Extract location
-            if " in " in text:
-                in_idx = text.find(" in ") + 4
-                location = user_input[in_idx:].split()[0].strip()
-                if location:
-                    plan["location"] = location.title()
+            # Extract location - look for "in CITY" or "hotels CITY"
+            location_patterns = [
+                r'in\s+([A-Za-z\s]+?)(?:\s+for|\s+on|\s*$)',
+                r'hotels?\s+([A-Za-z\s]+?)(?:\s+for|\s+on|\s*$)'
+            ]
+            
+            for pattern in location_patterns:
+                match = re.search(pattern, text)
+                if match:
+                    location = match.group(1).strip().title()
+                    if location and len(location) > 1:
+                        plan["location"] = location
+                    break
             
             # Extract dates
-            import re
             date_pattern = r'\d{4}-\d{2}-\d{2}'
             dates = re.findall(date_pattern, user_input)
             if dates:
@@ -140,6 +207,9 @@ if __name__ == "__main__":
     
     test_inputs = [
         "Find flights from NYC to LAX",
+        "flights from LHR to CDG",
+        "flights from LHR-CDG", 
+        "flights JFK LAX",
         "I need hotels in Paris", 
         "What's the budget for a 5-day trip?",
         "Plan my vacation to Tokyo"
@@ -154,8 +224,12 @@ if __name__ == "__main__":
     print("\n" + "="*40)
     print("Interactive mode (type 'quit' to exit):")
     while True:
-        user_input = input("\nYou: ").strip()
-        if user_input.lower() in ['quit', 'exit']:
+        try:
+            user_input = input("\nYou: ").strip()
+            if user_input.lower() in ['quit', 'exit']:
+                break
+            plan = agent.create_plan(user_input)
+            print(f"Plan: {json.dumps(plan, indent=2)}")
+        except KeyboardInterrupt:
+            print("\nGoodbye!")
             break
-        plan = agent.create_plan(user_input)
-        print(f"Plan: {json.dumps(plan, indent=2)}")
